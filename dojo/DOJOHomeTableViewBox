@@ -1,0 +1,649 @@
+//
+//  DOJOHomeTableViewBox.m
+//  dojo
+//
+//  Created by Michael Zuccarino on 7/10/14.
+//  Copyright (c) 2014 Michael Zuccarino. All rights reserved.
+//
+
+#import "DOJOHomeTableViewBox.h"
+
+@implementation DOJOHomeTableViewBox
+
+@synthesize dojoTableView, dojoCell, dataConv, isSearching, userEmail, dojoHashHolder, dojoHashList, searchBar, indexOfSelectedButton, specialJoinArr, reloadView, isFirstTime;
+
+- (id)initWithFrame:(CGRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        // Initialization code
+        self.dojoTableView = [[UITableView alloc] init];
+        [self.dojoTableView setDelegate:self];
+        [self.dojoTableView setDataSource:self];
+        
+        self.searchBar = [[UISearchBar alloc] init];
+        self.searchBar.delegate = self;
+        [searchBar becomeFirstResponder];
+        [searchBar showsCancelButton];
+        
+        isSearching = NO;
+        reloadView = NO;
+        NSLog(@"INIT WITH FRAME >> SWITCHING TO SEARCHING STATE >> OFF");
+        //[self.dojoTableView registerClass:[DOJOHomeTableViewCell class] forCellReuseIdentifier:@"myDojoCell"];
+    }
+    return self;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    isFirstTime = YES;
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    if (!isSearching)
+    {
+        NSLog(@"NOT SEARCHING, RELOADING TABLE VIEW");
+        //load user email lols
+                NSString *plistPath = [[NSString alloc] initWithString:[documentsDirectory stringByAppendingPathComponent:@"userProperties.plist"]];
+        //NSDictionary *dictToStore = [[NSDictionary alloc] initWithObjects:@[userEmail] forKeys:@[@"userEmail"]];
+        NSDictionary *loadedDict = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+        userEmail = [loadedDict valueForKey:@"userEmail"];
+        NSLog(@"email queried is %@",userEmail);
+        //perform check if added here
+        NSError *error;
+        NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[userEmail] forKeys:@[@"email"]];
+        NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/getDojoHomeList.php"]]];
+        
+        //customize request information
+        [request setHTTPMethod:@"POST"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+        [request setHTTPBody:result];
+        
+        NSURLResponse *response = nil;
+        error = nil;
+        
+        //fire the request and wait for response
+        result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+        dojoHashList = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+        NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+        NSLog(@"GET HOME LIST IS %@",dojoHashList);
+        
+        //write home list to file
+        NSString *homeListPath = [[NSString alloc] initWithString:[documentsDirectory stringByAppendingPathComponent:@"homeListArray.plist"]];
+        [dojoHashList writeToFile:homeListPath atomically:YES];
+        
+        
+        if ([decodedString isEqualToString:@"\"follows nothing\""])
+        {
+            NSLog(@"FOLLOWS NOTHING");
+            return 0;
+        }
+        else
+        {
+            NSLog(@"FOLLOWING %ld NUMBER OF DOJOS",(long)[dojoHashList count]);
+            return [dojoHashList count];
+        }
+    }
+    else
+    {
+        if (dataConv != NULL)
+        {
+            NSString *homeListPath = [[NSString alloc] initWithString:[documentsDirectory stringByAppendingPathComponent:@"homeListArray.plist"]];
+            [dataConv writeToFile:homeListPath atomically:YES];
+            NSLog(@"IN NUMBER_OF_ROWS>> NOT NULL>> DATA CONV IS %@",dataConv);
+            return [dataConv count];
+        }
+        else
+        {
+            NSLog(@"IN NUMBER_OF_ROWS>> NULL>> DATA CONV IS %@",dataConv);
+            return 0;
+        }
+    }
+}
+
+- (DOJOHomeTableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    dojoCell = (DOJOHomeTableViewCell *)[tableView dequeueReusableCellWithIdentifier:@"myDojoCell" forIndexPath:indexPath];
+    if (!dojoCell)
+    {
+        dojoCell = [[DOJOHomeTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"myDojoCell"];
+    }
+    
+    if ((reloadView==YES) || (isFirstTime==YES))
+    {
+        isFirstTime = NO;
+        NSString *placeholder;
+        if (!isSearching)
+        {
+            //load dojo information
+            //perform check if added here
+            placeholder = [[dojoHashList objectAtIndex:indexPath.row] valueForKey:@"dojohash"];
+            NSLog(@"NOT SEARCHING >> CELL FOR ROW %ld >> PLACEHOLDER HASH IS %@",(long)indexPath.row,placeholder);
+        }
+        else
+        {
+            placeholder = [[dataConv objectAtIndex:indexPath.row] valueForKey:@"dojohash"];
+            NSLog(@"SEARCHING >> CELL FOR ROW %ld >> PLACEHOLDER HASH IS %@",(long)indexPath.row,placeholder);
+        }
+        
+        NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[placeholder] forKeys:@[@"dojohash"]];
+        NSError *error = nil;
+        NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/loadDojoFromHash.php"]]];
+        
+        //customize request information
+        [request setHTTPMethod:@"POST"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+        [request setHTTPBody:result];
+        
+        NSURLResponse *response = nil;
+        
+        //fire the request and wait for response
+        result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+        NSArray *requestedConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+        NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+        NSLog(@"CELL FOR ROW %ld >> LOADED DOJO %@",(long)indexPath.row,requestedConv);
+        NSLog(@"CELL FOR ROW %ld >> setting dojo name as %@",(long)indexPath.row,[requestedConv valueForKey:@"dojo"]);
+        dojoCell.dojoNameLabel.text = [[requestedConv valueForKey:@"dojo"] objectAtIndex:0];
+        //[dojoCell.activeMemberLabel setText:[[dataConv objectAtIndex:indexPath.row] valueForKey:@"latestmembers"]];
+        //[dojoCell.latestPostNumber setText:[dataConv objectAtIndex:indexPath.row]];
+        
+        //CGFloat pointSize = 0.0;
+        /*CGSize size = [dojoCell.dojoNameLabel.text sizeWithFont:dojoCell.dojoNameLabel.font
+         minFontSize:0
+         actualFontSize:&pointSize
+         forWidth:self.frame.size.width
+         lineBreakMode:dojoCell.dojoNameLabel.lineBreakMode];
+         dojoCell.dojoNameLabel.frame = CGRectMake(dojoCell.dojoNameLabel.frame.origin.x,
+         dojoCell.dojoNameLabel.frame.origin.y,
+         size.width,
+         size.height);
+         */
+        [dojoCell.dojoNameLabel sizeToFit];
+        
+        dojoCell.addDojoButton.tag = indexPath.row;
+        
+        //dojoCell.dojoNameLabel.text = [[dataConv objectAtIndex:indexPath.row] valueForKey:@"dojo"];
+        //dojoCell.activeMemberLabel.text = [dataConv objectAtIndex:indexPath.row];
+        //dojoCell.latestPostNumber.text = [dataConv objectAtIndex:indexPath.row];
+        dojoCell.dojoButton.tag = indexPath.row;
+        dojoCell.addDojoButton.tag = indexPath.row;
+        
+        //perform check if added here
+        //send dojohash and email
+        dojoHashHolder = [[requestedConv valueForKey:@"dojohash"] objectAtIndex:0];
+        dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder, userEmail] forKeys:@[@"dojohash", @"email"]];
+        result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+        request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/checkIfFollow.php"]]];
+        
+        //customize request information
+        [request setHTTPMethod:@"POST"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+        [request setHTTPBody:result];
+        
+        response = nil;
+        error = nil;
+        
+        //fire the request and wait for response
+        result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+        NSData *tempdataConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+        decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+        NSLog(@"%@",result);
+        NSLog(@"%@",tempdataConv);
+        NSLog(@"%@",decodedString);
+        
+        if ([decodedString isEqualToString:@"\"joined\""])
+        {
+            NSLog(@"ALREADY FOLLOWED");
+            
+            //getting number of posts
+            NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder] forKeys:@[@"dojohash"]];
+            NSError *error = nil;
+            NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+            NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/getDojoPostList.php"]]];
+            
+            //customize request information
+            [request setHTTPMethod:@"POST"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+            [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+            [request setHTTPBody:result];
+            
+            NSURLResponse *response = nil;
+            
+            //fire the request and wait for response
+            result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+            NSArray *dojoPostList = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+            NSLog(@"LOADED FOR PAGE IS %@",dojoPostList);
+            
+            if ([dojoPostList count] == 0)
+            {
+                [dojoCell.addDojoButton setImage:[UIImage imageNamed:@"blank.png"] forState:UIControlStateNormal];
+                [dojoCell.addDojoButton setTitle:@"" forState:UIControlStateNormal];
+                [dojoCell.addDojoButton removeTarget:self action:@selector(switchFollowState:) forControlEvents:UIControlEventTouchUpInside];
+            }
+            else
+            {
+                [dojoCell.addDojoButton setImage:[UIImage imageNamed:@"blue.png"] forState:UIControlStateNormal];
+                [dojoCell.latestPostNumber setText:[NSString stringWithFormat:@"%d",[dojoPostList count]]];
+                [dojoCell.latestPostNumber setTextColor:[UIColor whiteColor]];
+                //[dojoCell.latestPostNumber setTextColor:[UIColor blackColor]];
+                NSLog(@"fuckin count is %@", [NSString stringWithFormat:@"%d",[dojoPostList count]]);
+                //dojoCell.addDojoButton.titleLabel.text = [NSString stringWithFormat:@"%d",[dojoHashList count]];
+                //[dojoCell.addDojoButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                [dojoCell.addDojoButton removeTarget:self action:@selector(switchFollowState:) forControlEvents:UIControlEventTouchUpInside];
+            }
+            
+            // [dojoCell.addDojoButton setImage:[UIImage imageNamed:@"checkedSelected.png"] forState:UIControlStateNormal];
+            dojoCell.dojoStatusLight.image = [UIImage imageNamed:@"joined-symbol.png"];
+            dojoCell.dojoStatusLight.frame = CGRectMake(dojoCell.dojoNameLabel.frame.origin.x+dojoCell.dojoNameLabel.frame.size.width+15, dojoCell.dojoStatusLight.frame.origin.y, dojoCell.dojoStatusLight.frame.size.width, dojoCell.dojoStatusLight.frame.size.height);
+            dojoCell.addDojoButton.enabled = YES;
+        }
+        else if ([decodedString isEqualToString:@"\"invited\""])
+            
+        {
+            NSLog(@"NOT FOLLOWED");
+            [dojoCell.addDojoButton setImage:[UIImage imageNamed:@"checkedNotSelected.png"] forState:UIControlStateNormal];
+            dojoCell.dojoStatusLight.image = [UIImage imageNamed:@"requested-purps.png"];
+            dojoCell.dojoStatusLight.frame = CGRectMake(dojoCell.dojoNameLabel.frame.origin.x+dojoCell.dojoNameLabel.frame.size.width+15, dojoCell.dojoStatusLight.frame.origin.y, dojoCell.dojoStatusLight.frame.size.width, dojoCell.dojoStatusLight.frame.size.height);
+            [dojoCell.addDojoButton addTarget:self action:@selector(switchFollowState:) forControlEvents:UIControlEventTouchUpInside];
+        }
+        else
+        {
+            dojoCell.dojoStatusLight.image = nil;
+        }
+        
+        dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder] forKeys:@[@"dojohash"]];
+        result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+        request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/getDojoMemberList.php"]]];
+        
+        //customize request information
+        [request setHTTPMethod:@"POST"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+        [request setHTTPBody:result];
+        
+        response = nil;
+        error = nil;
+        
+        //fire the request and wait for response
+        result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+        NSArray *rosterList = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+        //decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+        NSLog(@"GET HOME LIST IS %@",rosterList);
+        
+        NSString *fourmembersstring = @"";
+        for (int i = 0; i<[rosterList count]; i++) {
+            NSString *email = [[rosterList objectAtIndex:i] valueForKey:@"email"];
+            NSLog(@"looped through roster list count");
+            if ([email isEqualToString:userEmail])
+            {
+                //ignore
+            }
+            else
+            {
+                dataDict = [[NSDictionary alloc] initWithObjects:@[email] forKeys:@[@"email"]];
+                result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+                request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/getUserInfo.php"]]];
+                
+                //customize request information
+                [request setHTTPMethod:@"POST"];
+                [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+                [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+                [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+                [request setHTTPBody:result];
+                
+                response = nil;
+                error = nil;
+                
+                //fire the request and wait for response
+                result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+                NSArray *userInfo = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+                //decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+                NSLog(@"user info LIST IS %@",userInfo);
+                
+                if (fourmembersstring.length == 0)
+                {
+                    fourmembersstring = [NSString stringWithFormat:@"%@",[[userInfo objectAtIndex:0] valueForKey:@"firstname"]];
+                }
+                else
+                {
+                    fourmembersstring = [NSString stringWithFormat:@"%@, %@",fourmembersstring, [[userInfo objectAtIndex:0] valueForKey:@"firstname"]];
+                }
+                
+            }
+        }
+        
+        
+        if ([[[requestedConv valueForKey:@"code"] objectAtIndex:0] isEqualToString:@""])
+        {
+            NSLog(@"DOJO IS OPEN");
+            dojoCell.activeMemberLabel.text = fourmembersstring;
+            //dojoCell.activeMemberLabel.textColor = [UIColor greenColor];
+            dojoCell.lockedStatusLight.image = nil;
+        }
+        else
+        {
+            NSLog(@"DOJO IS LOCKED");
+            dojoCell.activeMemberLabel.text = fourmembersstring;
+            dojoCell.lockedStatusLight.image = [UIImage imageNamed:@"orientation-lock.png"];
+            dojoCell.lockedStatusLight.frame = CGRectMake(dojoCell.dojoNameLabel.frame.origin.x+dojoCell.dojoNameLabel.frame.size.width+40, dojoCell.dojoStatusLight.frame.origin.y, dojoCell.lockedStatusLight.frame.size.width, dojoCell.lockedStatusLight.frame.size.height);
+        }
+        
+        NSLog(@"%hhd",self.isSearching);
+        if (isSearching)
+        {
+            dojoCell.latestPostNumber.text = @"";
+        }
+
+    }
+    return dojoCell;
+}
+
+-(void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+{
+    /*
+    UIViewController *rootViewContr =  self.window.rootViewController;
+    [rootViewContr.navigationItem setLeftBarButtonItem:UIBarButtonSystemItemDone animated:YES];
+     */
+}
+
+-(void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+{
+    isSearching = TRUE;
+    NSLog(@"SEARCH BAR CANCEL BUTTON >> SWITCHING TO SEARCHING STATE >> ON");
+    NSString *dojoName = searchBar.text;
+    NSLog(@"SEARCH BUTTON CLICKED>> SEARCHING FOR DOJO %@",dojoName);
+    
+    NSError *error;
+    NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[dojoName] forKeys:@[@"dojo"]];
+    NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/searchForDojo.php"]]];
+    
+    //customize request information
+    [request setHTTPMethod:@"POST"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+    [request setHTTPBody:result];
+    
+    NSURLResponse *response = nil;
+    error = nil;
+    
+    //fire the request and wait for response
+    result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+    dataConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+    NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+    NSLog(@"SEARCH QUERY RETURNED: %@",dataConv);
+    
+    [dojoTableView reloadData];
+    
+}
+
+-(IBAction)switchFollowState:(UIButton *)button
+{
+    //load user email lols
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [paths objectAtIndex:0];
+    NSString *plistPath = [[NSString alloc] initWithString:[documentsDirectory stringByAppendingPathComponent:@"userProperties.plist"]];
+    //NSDictionary *dictToStore = [[NSDictionary alloc] initWithObjects:@[userEmail] forKeys:@[@"userEmail"]];
+    NSDictionary *loadedDict = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+    userEmail = [loadedDict valueForKey:@"userEmail"];
+    
+    NSArray *round2;
+    if(!isSearching)
+    {
+        round2 = [[NSArray alloc] initWithArray:dojoHashList copyItems:YES];
+    }
+    else
+    {
+        round2 = [[NSArray alloc] initWithArray:dataConv copyItems:YES];
+    }
+    
+    //perform check if added here
+    //send dojohash and email
+    indexOfSelectedButton = button.tag;
+    NSLog(@"SWITCH FOLLOW STATE WITH %@ FOR DOJO %@", round2, [round2 objectAtIndex:button.tag]);
+    dojoHashHolder = [[round2 objectAtIndex:button.tag] valueForKey:@"dojohash"];
+    NSError *error;
+    NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[[[round2 objectAtIndex:button.tag] valueForKey:@"dojohash"], userEmail] forKeys:@[@"dojohash", @"email"]];
+    NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+    NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/checkIfFollow.php"]]];
+    
+    //customize request information
+    [request setHTTPMethod:@"POST"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+    [request setHTTPBody:result];
+    
+    NSURLResponse *response = nil;
+    error = nil;
+    
+    //fire the request and wait for response
+    result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+    //NSData *tempdataConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+    NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+    NSLog(@"SWITCH FOLLOW STATE>> CHECK IF FOLLOW >>  RETURNS %@",decodedString);
+    
+    if ([decodedString isEqualToString:@"\"already followed\""])
+    {
+        UIAlertView *alreadyFollowedAlert = [[UIAlertView alloc] initWithTitle:@"wait" message:@"already following"
+                                                               delegate:self cancelButtonTitle:NSLocalizedString(@"Cancel",nil) otherButtonTitles: nil];
+        alreadyFollowedAlert.tag = 3;
+        [alreadyFollowedAlert show];
+    }
+    else
+    {
+        if ([[[round2 objectAtIndex:button.tag] valueForKey:@"code"] isEqualToString:@""])
+        {
+            dojoCell.activeMemberLabel.text = @"open";
+            dojoCell.activeMemberLabel.textColor = [UIColor greenColor];
+            
+            //send dojohash and email
+            NSError *error;
+            NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder, userEmail] forKeys:@[@"dojohash", @"email"]];
+            NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+            NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/followDojo.php"]]];
+            
+            //customize request information
+            [request setHTTPMethod:@"POST"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+            [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+            [request setHTTPBody:result];
+            
+            NSURLResponse *response = nil;
+            error = nil;
+            
+            //fire the request and wait for response
+            result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+            //dataConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+            NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+            NSLog(@"SWITCH FOLLOW STATE >> FOLLOWING OPEN DOJO WITH RETURN CODE %@",decodedString);
+            
+            UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"sweet" message:@"now following" delegate:self cancelButtonTitle:@"cool" otherButtonTitles:nil];
+            alertView.tag = 1;
+            [alertView show];
+        }
+        else
+        {
+            dojoCell.activeMemberLabel.text = @"locked";
+            dojoCell.dojoNameLabel.text = [[round2 objectAtIndex:button.tag] valueForKey:@"dojo"];
+            //dojoCell.activeMemberLabel.text = [dataConv objectAtIndex:indexPath.row];
+            //dojoCell.latestPostNumber.text = [dataConv objectAtIndex:indexPath.row];
+            UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:[[dataConv objectAtIndex:button.tag] valueForKey:@"dojo"] message:@"Code?" delegate:self cancelButtonTitle:@"Cancel" otherButtonTitles:@"Ok", nil];
+            alertView.alertViewStyle = UIAlertViewStyleSecureTextInput;
+            UITextField *codeTextField = [alertView textFieldAtIndex:0];
+            alertView.tag = 2;
+            [alertView show];
+        }
+    }
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex
+{
+    NSArray *round2;
+    NSString *codeHolder;
+    if(!isSearching)
+    {
+        NSError *error;
+        round2 = [[NSArray alloc] initWithArray:dojoHashList copyItems:YES];
+        dojoHashHolder = [[round2 objectAtIndex:indexOfSelectedButton] valueForKey:@"dojohash"];
+        NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder] forKeys:@[@"dojohash"]];
+        NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+        NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/loadDojoFromHash.php"]]];
+        
+        //customize request information
+        [request setHTTPMethod:@"POST"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+        [request setHTTPBody:result];
+        
+        NSURLResponse *response = nil;
+        error = nil;
+        
+        //fire the request and wait for response
+        result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+        specialJoinArr = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+        //NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+        codeHolder = [[specialJoinArr objectAtIndex:0] valueForKeyPath:@"code"];
+        NSLog(@"SWITCH FOLLOW STATE >> RETURN CODE %@ with special john %@",codeHolder, specialJoinArr);
+        round2 = specialJoinArr;
+    }
+    else
+    {
+        round2 = [[NSArray alloc] initWithArray:dataConv copyItems:YES];
+    }
+    NSLog(@"selected row is %u, entered pass is %@", indexOfSelectedButton, [alertView textFieldAtIndex:0].text);
+    if (alertView.tag == 1)
+    {
+        // joined open dojo
+        NSLog(@"USER CLOSED WELCOME TO OPEN DOJO PROMPT");
+        reloadView = YES;
+        [dojoTableView reloadData];
+        reloadView = NO;
+    }
+    else if (alertView.tag == 2)
+    {
+        NSString *enteredCode = [alertView textFieldAtIndex:0].text;
+        NSString *sanitized;
+        NSString *dojostrang;
+        if (!isSearching)
+        {
+            sanitized = [NSString stringWithFormat:@"%@",codeHolder];
+            dojostrang = [[specialJoinArr objectAtIndex:0] valueForKeyPath:@"dojo"];
+        }
+        else
+        {
+            sanitized = [NSString stringWithFormat:@"%@",[[round2 objectAtIndex:indexOfSelectedButton] valueForKey:@"code"]];
+            dojostrang = [[round2 objectAtIndex:indexOfSelectedButton] valueForKey:@"dojo"];
+        }
+        if ([sanitized isEqualToString:enteredCode])
+        {
+                
+            NSLog(@"CORRECT CODE FOR DOJO %@ ENTERED",dojostrang);
+            //the code alert view closed
+            NSFileManager *fileManager = [NSFileManager defaultManager];
+            NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+            NSString *documentsDirectory = [paths objectAtIndex:0];
+            NSString *plistPath = [[NSString alloc] initWithString:[documentsDirectory stringByAppendingPathComponent:@"userProperties.plist"]];
+            //NSDictionary *dictToStore = [[NSDictionary alloc] initWithObjects:@[userEmail] forKeys:@[@"userEmail"]];
+            NSDictionary *loadedDict = [[NSDictionary alloc] initWithContentsOfFile:plistPath];
+            userEmail = [loadedDict valueForKey:@"userEmail"];
+            
+            //perform check if added here
+            //send dojohash and email
+            NSError *error;
+            NSString *codeText = [alertView textFieldAtIndex:0].text;
+            NSLog(@"dojo hash holder is %@",dojoHashHolder);
+            NSDictionary *dataDict = [[NSDictionary alloc] initWithObjects:@[dojoHashHolder, userEmail,@"correct"] forKeys:@[@"dojohash", @"email",@"correct"]];
+            NSData *result =[NSJSONSerialization dataWithJSONObject:dataDict options:0 error:&error];
+            NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:[NSString stringWithFormat:@"http://54.193.25.91/dojo-site-api/followDojo.php"]]];
+            
+            //customize request information
+            [request setHTTPMethod:@"POST"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+            [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+            [request setValue:[NSString stringWithFormat:@"%ld", (long)dataDict.count] forHTTPHeaderField:@"Content-Length"];
+            [request setHTTPBody:result];
+            
+            NSURLResponse *response = nil;
+            error = nil;
+            
+            //fire the request and wait for response
+            result = [NSURLConnection sendSynchronousRequest:request returningResponse:&response error:&error];
+            //dataConv = [NSJSONSerialization JSONObjectWithData:result options:NSJSONReadingAllowFragments error:&error];
+            NSString *decodedString = [[NSString alloc] initWithData:result encoding:NSUTF8StringEncoding];
+            NSLog(@"SWITCH FOLLOW STATE >> FOLLOW LOCKED DOJO WITH RETURN CODE %@",decodedString);
+            
+            reloadView = YES;
+            [dojoTableView reloadData];
+            reloadView = NO;
+        }
+        else
+        {
+            //wrong code
+            NSLog(@"WRONG CODE %@ FOR DOJO %@ ENTERED, CODE IS %@", sanitized,dojostrang,enteredCode);
+            alertView.message = @"please try again";
+        }
+    }
+    else if (alertView.tag == 3)
+    {
+        NSLog(@"joined open group");
+        reloadView = YES;
+        [dojoTableView reloadData];
+        reloadView = NO;
+    }
+}
+
+- (void)searchBarTextDidEndEditing:(UISearchBar *)searchBarPassed
+{
+    // add self
+    /*
+    NSLog(@"godamn");
+    if ([searchBarPassed.text isEqualToString:@""])
+    {
+        [searchBar resignFirstResponder];
+    }
+     */
+}
+
+-(void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
+{
+    [searchBar resignFirstResponder];
+    searchBar.text = @"";
+    NSLog(@"SEARCH BAR CANCEL BUTTON >> SWITCHING TO SEARCHING STATE >> OFF");
+    isSearching = NO;
+    reloadView = YES;
+    [dojoTableView reloadData];
+    reloadView = NO;
+}
+
+
+
+/*
+// Only override drawRect: if you perform custom drawing.
+// An empty implementation adversely affects performance during animation.
+- (void)drawRect:(CGRect)rect
+{
+    // Drawing code
+}
+*/
+
+@end

@@ -1,0 +1,6 @@
+framework module MapboxGL {
+  umbrella header "MapboxGL-umbrella.h"
+
+  export *
+  module * { export * }
+}

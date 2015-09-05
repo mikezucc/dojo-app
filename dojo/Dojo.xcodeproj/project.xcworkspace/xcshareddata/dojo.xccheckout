@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IDESourceControlProjectFavoriteDictionaryKey</key>
+	<false/>
+	<key>IDESourceControlProjectIdentifier</key>
+	<string>22560FF8-53BB-4EDE-B7B6-97D7B316D797</string>
+	<key>IDESourceControlProjectName</key>
+	<string>dojo</string>
+	<key>IDESourceControlProjectOriginsDictionary</key>
+	<dict>
+		<key>3E923DEAAB4734804897F927A6460FF15B27AB63</key>
+		<string>https://github.com/undiscovrd/dojo.git</string>
+	</dict>
+	<key>IDESourceControlProjectPath</key>
+	<string>dojo/dojo.xcodeproj</string>
+	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
+	<dict>
+		<key>3E923DEAAB4734804897F927A6460FF15B27AB63</key>
+		<string>../../..</string>
+	</dict>
+	<key>IDESourceControlProjectURL</key>
+	<string>https://github.com/undiscovrd/dojo.git</string>
+	<key>IDESourceControlProjectVersion</key>
+	<integer>111</integer>
+	<key>IDESourceControlProjectWCCIdentifier</key>
+	<string>3E923DEAAB4734804897F927A6460FF15B27AB63</string>
+	<key>IDESourceControlProjectWCConfigurations</key>
+	<array>
+		<dict>
+			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
+			<string>public.vcs.git</string>
+			<key>IDESourceControlWCCIdentifierKey</key>
+			<string>3E923DEAAB4734804897F927A6460FF15B27AB63</string>
+			<key>IDESourceControlWCCName</key>
+			<string>dojo</string>
+		</dict>
+	</array>
+</dict>
+</plist>
